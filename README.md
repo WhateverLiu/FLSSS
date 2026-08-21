@@ -47,5 +47,3 @@ gen(X, lo, hi, len=0, n_solutions=1,
 | `n_threads` | workers; `1` is serial; `0` uses hardware concurrency |
 
 Returns a list of NumPy arrays of row indices.
-
-Related R package: [FLSSS on CRAN](https://CRAN.R-project.org/package=FLSSS).

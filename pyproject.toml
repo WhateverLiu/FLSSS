@@ -36,9 +36,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Mathematics",
 ]
 
-[project.urls]
-"CRAN (R package)" = "https://CRAN.R-project.org/package=FLSSS"
-
 [tool.setuptools]
 package-dir = {"" = "python"}
 
