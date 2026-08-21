@@ -189,8 +189,21 @@ using scheduler_type = scheduler<WorkStealingJob>;
 extern inline scheduler_type& get_current_scheduler() {
   auto current_scheduler = scheduler_type::get_current_scheduler();
   if (current_scheduler == nullptr) {
+#ifdef _WIN32
+    // Windows: never destruct the process-lifetime scheduler. Its
+    // ~scheduler() joins the worker threads, and on Windows that join
+    // runs during thread_local teardown at DLL detach, under the loader
+    // lock, which deadlocks. Leaking the singleton skips the join; the
+    // OS reclaims the parked workers at process exit. See scheduler.h
+    // ~scheduler()/shutdown(). Extension modules are not FreeLibrary'd
+    // mid-process, so the leak is safe here.
+    static thread_local scheduler_type* local_scheduler =
+        new scheduler_type(init_num_workers());
+    return *local_scheduler;
+#else
     static thread_local scheduler_type local_scheduler(init_num_workers());
     return local_scheduler;
+#endif
   }
   return *current_scheduler;
 }

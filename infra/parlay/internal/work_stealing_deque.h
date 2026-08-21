@@ -45,21 +45,31 @@ struct Deque {
 
   Deque() : bot(0), age(age_t{0, 0}) {}
 
-  // Adds a new job to the bottom of the queue. Only the owning
-  // thread can push new items. This must not be called by any
+  // Adds a new job to the bottom of the queue if there is room. Only the
+  // owning thread can push new items. This must not be called by any
   // other thread.
   //
-  // Returns true if the queue was empty before this push
-  bool push_bottom(Job* job) {
+  // Returns {was_empty, pushed}:
+  //   pushed    - false iff the deque is full, in which case the job was NOT
+  //               added and the caller must run it inline. This replaces the
+  //               previous std::abort() on overflow, so deep nested
+  //               parallelism now degrades gracefully to sequential execution
+  //               instead of killing the process. See cmuparlay/parlaylib#99.
+  //   was_empty - true if the queue was empty before a successful push
+  //               (only meaningful when pushed == true).
+  std::pair<bool, bool> push_bottom(Job* job) {
     auto local_bot = bot.load(std::memory_order_acquire);      // atomic load
+    // Full check first, before touching any slot, so a failed push leaves the
+    // deque completely untouched. Same effective capacity as before: this
+    // branch simply replaces the old overflow abort() and adds no hot-path
+    // work (it tests an already-loaded value).
+    if (local_bot + 1 == q_size) {
+      return {false, false};
+    }
     deq[local_bot].job.store(job, std::memory_order_release);  // shared store
     local_bot += 1;
-    if (local_bot == q_size) {
-      std::cerr << "internal error: scheduler queue overflow\n";
-      std::abort();
-    }
     bot.store(local_bot, std::memory_order_seq_cst);  // shared store
-    return (local_bot == 1);
+    return {(local_bot == 1), true};
   }
 
   // Pop an item from the top of the queue, i.e., the end that is not

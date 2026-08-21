@@ -128,13 +128,17 @@ struct scheduler {
     worker_info = std::move(parent_worker_info);
   }
 
-  // Push onto local stack.
-  void spawn(Job* job) {
+  // Push onto local stack. Returns false if the local deque is full, in which
+  // case the job was NOT queued and the caller must execute it inline.
+  bool spawn(Job* job) {
     int id = worker_id();
-    [[maybe_unused]] bool first = deques[id].push_bottom(job);
+    auto [first, pushed] = deques[id].push_bottom(job);
 #if PARLAY_ELASTIC_PARALLELISM
-    if (first) wake_up_a_worker();
+    if (pushed && first) wake_up_a_worker();
+#else
+    (void)first;
 #endif
+    return pushed;
   }
 
   // Wait until the given condition is true.
@@ -337,18 +341,27 @@ class fork_join_scheduler {
   template <typename L, typename R>
   static void pardo(
       scheduler_t& scheduler, L&& left, R&& right, bool conservative = false) {
-    auto execute_right = [&]() { std::forward<R>(right)(); };
     auto right_job = make_job(right);
-    scheduler.spawn(&right_job);
-    std::forward<L>(left)();
-    if (const Job* job = scheduler.get_own_job(); job != nullptr) {
-      assert(job == &right_job);
-      execute_right();
+    if (scheduler.spawn(&right_job)) {
+      std::forward<L>(left)();
+      if (const Job* job = scheduler.get_own_job(); job != nullptr) {
+        assert(job == &right_job);
+        std::forward<R>(right)();
+      }
+      else {
+        auto done = [&]() { return right_job.finished(); };
+        scheduler.wait_until(done, conservative);
+        assert(right_job.finished());
+      }
     }
     else {
-      auto done = [&]() { return right_job.finished(); };
-      scheduler.wait_until(done, conservative);
-      assert(right_job.finished());
+      // Local deque is full: run both branches sequentially on this worker.
+      // par_do only requires that both thunks run; their order is unspecified,
+      // so serial left-then-right is a correct execution. This bounds stack
+      // space, and parallelism resumes automatically as this worker unwinds
+      // and frees deque slots. See cmuparlay/parlaylib#99.
+      std::forward<L>(left)();
+      std::forward<R>(right)();
     }
   }
 
