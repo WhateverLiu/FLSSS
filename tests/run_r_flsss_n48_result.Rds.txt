@@ -1,0 +1,2 @@
+list(n = 48L, k = 14L, target = 2006889056256587, ME = 0.5, n_solutions = 1L, 
+    elapsed_s = 106.535, user_s = 61.063, sys_s = 45.393)
