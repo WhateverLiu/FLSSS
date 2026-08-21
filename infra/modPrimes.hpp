@@ -1,5 +1,5 @@
 
-uint64_t modPrimes[62] = {
+inline uint64_t modPrimes[62] = {
   5ull, 11ull, 23ull, 47ull, 97ull, 199ull, 409ull, 823ull, 1741ull,
   3469ull, 6949ull, 14033ull, 28411ull, 57557ull, 116731ull, 236897ull,
   480881ull, 976369ull, 1982627ull, 4026031ull, 8175383ull, 16601593ull,

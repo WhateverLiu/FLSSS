@@ -2,8 +2,7 @@
 // Scalar fixed-cardinality subset-sum branch-and-bound
 // (DFS over node arena).
 // ncol > 1 uses VerifyBand as a post-filter on
-// Contained tuples. VerifyBand<Val, NcolRest>
-// with NcolRest != 0 unrolls the rest-width loops.
+// Contained tuples (other columns after the leading one).
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -57,15 +56,12 @@ struct VerifyBounds {
     Val hi;
 };
 
-// NcolRest == 0: runtime rest-width.
-// NcolRest != 0: compile-time rest-width for unroll / SIMD.
-template <typename Val, size_t NcolRest = 0>
+template <typename Val>
 struct VerifyBand {
     static constexpr bool active = true;
-    static constexpr size_t kRest = NcolRest;
 
     const Val* vv = nullptr;
-    size_t ncolRest = NcolRest;
+    size_t ncolRest = 0;
     const VerifyBounds<Val>* bounds = nullptr;
     Val* acc_start = nullptr;
     Val* acc = nullptr;
@@ -83,16 +79,13 @@ struct VerifyBand {
         std::swap(acc, o.acc);
     }
 
-    [[nodiscard]] constexpr size_t rest() const {
-        if constexpr (kRest != 0) return kRest;
-        return ncolRest;
-    }
+    [[nodiscard]] size_t rest() const { return ncolRest; }
 
     void bind(const Val* vv_, const VerifyBounds<Val>* bounds_,
               size_t ncol) {
         vv = vv_;
         bounds = bounds_;
-        ncolRest = kRest != 0 ? kRest : ncol;
+        ncolRest = ncol;
     }
 
     void init(size_t subsetLen) {
@@ -124,13 +117,8 @@ struct VerifyBand {
     void acc_append(const Val* src) {
         const auto r = rest();
         const Val* acc_prior = acc - r;
-        if constexpr (kRest != 0) {
-            for (auto k = size_t{0}; k < kRest; ++k)
-                acc[k] = acc_prior[k] + src[k];
-        } else {
-            for (auto k = size_t{0}; k < r; ++k)
-                acc[k] = acc_prior[k] + src[k];
-        }
+        for (auto k = size_t{0}; k < r; ++k)
+            acc[k] = acc_prior[k] + src[k];
         acc += r;
     }
 
@@ -149,20 +137,11 @@ struct VerifyBand {
     [[nodiscard]] bool inBand() const {
         const auto r = rest();
         const Val* sums = acc - r;
-        if constexpr (kRest != 0) {
-            unsigned miss = 0;
-            for (auto k = size_t{0}; k < kRest; ++k) {
-                miss |= unsigned(sums[k] < bounds[k].lo);
-                miss |= unsigned(sums[k] > bounds[k].hi);
-            }
-            return miss == 0;
-        } else {
-            for (auto k = size_t{0}; k < r; ++k) {
-                if (sums[k] < bounds[k].lo || sums[k] > bounds[k].hi)
-                    return false;
-            }
-            return true;
+        for (auto k = size_t{0}; k < r; ++k) {
+            if (sums[k] < bounds[k].lo || sums[k] > bounds[k].hi)
+                return false;
         }
+        return true;
     }
 };
 

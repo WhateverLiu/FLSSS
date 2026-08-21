@@ -102,7 +102,7 @@ using iit = IntRAiter;
 
 
 #include "tiktok.hpp"
-tiktok timer;
+inline tiktok timer;
 #include "lowestUBprime.hpp"
 #include "match.hpp"
 #include "GroupByHashmapView.hpp"

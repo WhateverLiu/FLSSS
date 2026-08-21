@@ -63,10 +63,20 @@ try:
 except ImportError:
     numpy_inc = []
 
+_vals = ("i8", "i16", "i32", "i64")
+_core_sources = ["python/flsss/_core.cpp"]
+_core_sources += [
+    f"python/flsss/_core_{v}_{i}.cpp"
+    for v in _vals for i in _vals
+]
+
 ext = Pybind11Extension(
     "flsss._core",
-    ["python/flsss/_core.cpp"],
-    include_dirs=[str(ROOT)] + numpy_inc,
+    _core_sources,
+    include_dirs=[
+        str(ROOT),
+        str(ROOT / "python" / "flsss"),
+    ] + numpy_inc,
     cxx_std=20,
 )
 
@@ -80,13 +90,15 @@ class BuildExt(build_ext):
         ):
             self.compiler = "mingw32"
         super().finalize_options()
+        if not getattr(self, "parallel", None):
+            self.parallel = os.cpu_count() or True
 
     def build_extensions(self):
         msvc = self.compiler.compiler_type == "msvc"
         native = _want_native()
         if msvc:
             # /GL+/LTCG can fail on this large TU in CI.
-            opts = ["/O2", "/fp:fast", "/bigobj"]
+            opts = ["/O2", "/fp:fast", "/bigobj", "/MP"]
             link = []
         else:
             # Pybind11Extension always injects MSVC flags
@@ -114,6 +126,10 @@ class BuildExt(build_ext):
                 link.append("-flto")
             if sys.platform == "win32":
                 opts.append("-Wa,-mbig-obj")
+                # MinGW emits a strong TLS init stub per TU
+                # for parlay's inline thread_local worker_info.
+                link.append(
+                    "-Wl,--allow-multiple-definition")
         for e in self.extensions:
             e.extra_compile_args = (
                 list(e.extra_compile_args) + opts)

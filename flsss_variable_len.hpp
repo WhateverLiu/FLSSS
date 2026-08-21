@@ -8,7 +8,7 @@
 #include <utility>
 
 
-template <typename Val, typename Ind, size_t Ncol = 0>
+template <typename Val, typename Ind>
 [[nodiscard]] vec<vec<Ind>> FLSSS_variable_len(
     const Val* X, size_t nrow, size_t ncol,
     const Val* targetSumLowerBound,
@@ -18,16 +18,15 @@ template <typename Val, typename Ind, size_t Ncol = 0>
     double timeLimitSeconds,
     int n_threads = 1)
 {
-    const auto nc = flsss_detail::ncol_or<Ncol>(ncol);
-    if (nrow == 0 || nc == 0 || nSolutionsNeeded == 0)
+    if (nrow == 0 || ncol == 0 || nSolutionsNeeded == 0)
         return {};
 
-    const auto moments = make_column_moments(X, nrow, nc);
+    const auto moments = make_column_moments(X, nrow, ncol);
     const vec<Val> lo_saved(
-        targetSumLowerBound, targetSumLowerBound + nc);
+        targetSumLowerBound, targetSumLowerBound + ncol);
     const vec<Val> hi_saved(
-        targetSumUpperBound, targetSumUpperBound + nc);
-    const auto col_totals = column_totals(X, nrow, nc);
+        targetSumUpperBound, targetSumUpperBound + ncol);
+    const auto col_totals = column_totals(X, nrow, ncol);
 
     struct Candidate {
         size_t solve_k = 0;
@@ -48,13 +47,13 @@ template <typename Val, typename Ind, size_t Ncol = 0>
             solve_k, flipped, trivial_full, lo_saved, hi_saved, {}};
         if (flipped)
             complement_bounds_in_place(
-                col_totals, c.lo.data(), c.hi.data(), nc);
+                col_totals, c.lo.data(), c.hi.data(), ncol);
         if (!tighten_bounds_for_len(
-                X, nrow, nc, solve_k,
+                X, nrow, ncol, solve_k,
                 c.lo.data(), c.hi.data()))
             return std::nullopt;
         c.score = score_len(
-            solve_k, nrow, nc, moments, X,
+            solve_k, nrow, ncol, moments, X,
             c.lo.data(), c.hi.data());
         return c;
     };
@@ -93,8 +92,8 @@ template <typename Val, typename Ind, size_t Ncol = 0>
             continue;
         }
 
-        auto part = FLSSS_nonzero_len_with_leading<Val, Ind, Ncol>(
-            X, nrow, nc, c.solve_k, c.score.leadingC,
+        auto part = FLSSS_nonzero_len_with_leading<Val, Ind>(
+            X, nrow, ncol, c.solve_k, c.score.leadingC,
             c.lo.data(), c.hi.data(),
             nSolutionsNeeded - solutions.size(),
             maxIterations, timeLimitSeconds, deadline,

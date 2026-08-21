@@ -4,7 +4,7 @@ include pyproject.toml
 include setup.py
 include *.hpp
 recursive-include infra *.h *.hpp
-recursive-include python *.py *.cpp
+recursive-include python *.py *.cpp *.hpp
 global-exclude .DS_Store
 global-exclude *.so *.pyd *.dll
 global-exclude __pycache__ *.py[cod]

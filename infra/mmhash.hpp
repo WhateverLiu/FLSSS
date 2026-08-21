@@ -4,7 +4,7 @@
 // and its speed is only 0.875x of std::hash(). Of course,
 // the speedup of std::hash() is due to precompiled stdlibc++,
 // heavily optimized. Only Use mmhash when you need multiple hashes.
-uint64_t mmhash ( const void * key, int64_t len, uint64_t seed )
+inline uint64_t mmhash ( const void * key, int64_t len, uint64_t seed )
 {
   // const uint64_t m = BIG_CONSTANT(0xc6a4a7935bd1e995);
   constexpr const uint64_t m = 0xc6a4a7935bd1e995;

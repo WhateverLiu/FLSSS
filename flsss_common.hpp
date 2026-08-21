@@ -12,17 +12,6 @@ using vec = infra::sequence<T>;
 
 namespace flsss_detail {
 
-template <size_t Ncol>
-[[nodiscard]] constexpr size_t ncol_or(size_t ncol) noexcept
-{
-    if constexpr (Ncol != 0) return Ncol;
-    return ncol;
-}
-
-template <size_t Ncol>
-inline constexpr size_t verify_rest_v =
-    Ncol > 1 ? Ncol - 1 : 0;
-
 [[nodiscard]] inline std::chrono::steady_clock::time_point
 deadline_from_seconds(double t)
 {

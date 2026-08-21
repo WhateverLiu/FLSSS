@@ -96,7 +96,7 @@ template <typename Ind>
 }
 
 // Assumes bounds are already tightened.
-template <typename Val, typename Ind, size_t Ncol = 0>
+template <typename Val, typename Ind>
 [[nodiscard]] vec<vec<Ind>> FLSSS_nonzero_len_with_leading(
     const Val* X, size_t nrow, size_t ncol,
     size_t len,
@@ -110,20 +110,19 @@ template <typename Val, typename Ind, size_t Ncol = 0>
         std::chrono::steady_clock::time_point> deadline = {},
     int n_threads = 1)
 {
-    const auto nc = flsss_detail::ncol_or<Ncol>(ncol);
-    if (nc == 1)
+    if (ncol == 1)
         leadingC = 0;
-    else if (leadingC >= nc)
+    else if (leadingC >= ncol)
         return {};
 
     vec<Val> leading_col;
     leading_col.reserve(nrow);
     vec<Val> verifyMatrix;
     vec<flsss_detail::VerifyBounds<Val>> verifyBounds;
-    if (nc > 1) {
-        verifyMatrix.reserve(nrow * (nc - 1));
-        verifyBounds.reserve(nc - 1);
-        for (size_t c = 0; c < nc; ++c) {
+    if (ncol > 1) {
+        verifyMatrix.reserve(nrow * (ncol - 1));
+        verifyBounds.reserve(ncol - 1);
+        for (size_t c = 0; c < ncol; ++c) {
             if (c == leadingC) continue;
             verifyBounds.push_back({
                 targetSumLowerBound[c],
@@ -134,16 +133,16 @@ template <typename Val, typename Ind, size_t Ncol = 0>
     vec<Ind> rowOrder = flsss_detail::indices<Ind>(nrow);
     std::sort(rowOrder.begin(), rowOrder.end(),
         [&](auto a, auto b) {
-            return X[size_t(a) * nc + leadingC]
-                < X[size_t(b) * nc + leadingC];
+            return X[size_t(a) * ncol + leadingC]
+                < X[size_t(b) * ncol + leadingC];
         });
     for (size_t j = 0; j < nrow; ++j) {
         const auto src = size_t(rowOrder[j]);
-        leading_col.push_back(X[src * nc + leadingC]);
-        if (nc > 1) {
-            for (size_t c = 0; c < nc; ++c) {
+        leading_col.push_back(X[src * ncol + leadingC]);
+        if (ncol > 1) {
+            for (size_t c = 0; c < ncol; ++c) {
                 if (c == leadingC) continue;
-                verifyMatrix.push_back(X[src * nc + c]);
+                verifyMatrix.push_back(X[src * ncol + c]);
             }
         }
     }
@@ -152,9 +151,6 @@ template <typename Val, typename Ind, size_t Ncol = 0>
     const auto hiLeading = targetSumUpperBound[leadingC];
     vec<Ind> rootBounds =
         flsss_detail::root_index_bounds<Ind>(len, nrow);
-
-    using VerifyT = flsss_detail::VerifyBand<
-        Val, flsss_detail::verify_rest_v<Ncol>>;
 
     vec<vec<Ind>> solutions;
     const auto dl = deadline.value_or(
@@ -170,11 +166,11 @@ template <typename Val, typename Ind, size_t Ncol = 0>
             n_threads)
             .swap(solutions);
     } else {
-        VerifyT verify;
+        flsss_detail::VerifyBand<Val> verify;
         verify.bind(verifyMatrix.data(),
                     verifyBounds.data(),
                     verifyBounds.size());
-        flsss_detail::runCoreWithMat<Val, Ind, VerifyT>(
+        flsss_detail::runCoreWithMat<Val, Ind, decltype(verify)>(
             M, len, rootBounds.data(), rootBounds.data() + len,
             nrow, rowOrder.data(),
             loLeading, hiLeading,
@@ -186,7 +182,7 @@ template <typename Val, typename Ind, size_t Ncol = 0>
 }
 
 
-template <typename Val, typename Ind, size_t Ncol = 0>
+template <typename Val, typename Ind>
 [[nodiscard]] vec<vec<Ind>> FLSSS_nonzero_len(
     const Val* X, size_t nrow, size_t ncol,
     size_t len,
@@ -199,22 +195,21 @@ template <typename Val, typename Ind, size_t Ncol = 0>
         std::chrono::steady_clock::time_point> deadline = {},
     int n_threads = 1)
 {
-    const auto nc = flsss_detail::ncol_or<Ncol>(ncol);
-    if (len == 0 || len > nrow || nrow == 0 || nc == 0)
+    if (len == 0 || len > nrow || nrow == 0 || ncol == 0)
         return {};
 
     const bool complement = len > nrow - len;
     const size_t k_solve = complement ? nrow - len : len;
 
     vec<Val> lo_work(
-        targetSumLowerBound, targetSumLowerBound + nc);
+        targetSumLowerBound, targetSumLowerBound + ncol);
     vec<Val> hi_work(
-        targetSumUpperBound, targetSumUpperBound + nc);
+        targetSumUpperBound, targetSumUpperBound + ncol);
 
     if (complement) {
-        const auto totals = column_totals(X, nrow, nc);
+        const auto totals = column_totals(X, nrow, ncol);
         if (k_solve == 0) {
-            for (size_t c = 0; c < nc; ++c)
+            for (size_t c = 0; c < ncol; ++c)
                 if (lo_work[c] > totals[c]
                     || hi_work[c] < totals[c])
                     return {};
@@ -222,24 +217,24 @@ template <typename Val, typename Ind, size_t Ncol = 0>
             return vec<vec<Ind>>{std::move(all)};
         }
         complement_bounds_in_place(
-            totals, lo_work.data(), hi_work.data(), nc);
+            totals, lo_work.data(), hi_work.data(), ncol);
     }
 
     if (!tighten_bounds_for_len(
-            X, nrow, nc, k_solve,
+            X, nrow, ncol, k_solve,
             lo_work.data(), hi_work.data()))
         return {};
 
     size_t leadingC = 0;
-    if (nc > 1) {
-        const auto moments = make_column_moments(X, nrow, nc);
+    if (ncol > 1) {
+        const auto moments = make_column_moments(X, nrow, ncol);
         leadingC = score_len(
-            k_solve, nrow, nc, moments, X,
+            k_solve, nrow, ncol, moments, X,
             lo_work.data(), hi_work.data()).leadingC;
     }
 
-    auto subset = FLSSS_nonzero_len_with_leading<Val, Ind, Ncol>(
-        X, nrow, nc, k_solve, leadingC,
+    auto subset = FLSSS_nonzero_len_with_leading<Val, Ind>(
+        X, nrow, ncol, k_solve, leadingC,
         lo_work.data(), hi_work.data(),
         nSolutionsNeeded, maxIterations,
         timeLimitSeconds, deadline, n_threads);
