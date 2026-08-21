@@ -63,12 +63,12 @@ try:
 except ImportError:
     numpy_inc = []
 
+# Split by Val into 4 instantiation TUs (each defines all 4 Ind variants),
+# plus the dispatch/module TU. Four TUs match the ~4-vCPU CI runners: MSVC
+# /MP keeps them parallel while the heavy header stack is parsed 4x, not 16x.
 _vals = ("i8", "i16", "i32", "i64")
 _core_sources = ["python/flsss/_core.cpp"]
-_core_sources += [
-    f"python/flsss/_core_{v}_{i}.cpp"
-    for v in _vals for i in _vals
-]
+_core_sources += [f"python/flsss/_core_{v}.cpp" for v in _vals]
 
 ext = Pybind11Extension(
     "flsss._core",
