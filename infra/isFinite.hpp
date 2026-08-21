@@ -24,7 +24,8 @@ bool isFinite (auto y)
     uint64_t x; std::memcpy(&x, &y, sizeof(uint64_t));
     return (x & a) != a; // If input type is double, check like this.
   } 
-  else static_assert(false, "Type is not float or double");
+  else static_assert(sizeof(y) == 0,
+    "Type is not float or double");
 } 
 
 

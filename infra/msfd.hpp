@@ -5,6 +5,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 template<class P>
 concept MsfdProblem =
@@ -129,12 +130,13 @@ void msfd(P& root, int n_threads,
         parallel_for(0, size_t(T),
             [&](size_t i) { run(int(i)); }, 1);
     } else {
-        auto* ts = new std::jthread[T - 1];
+        std::vector<std::thread> ts;
+        ts.reserve(size_t(T - 1));
         for (int i = 1; i < T; ++i)
-            ts[i - 1] = std::jthread(
+            ts.emplace_back(
                 [&run, i] { run(i); });
         run(0);
-        delete[] ts;
+        for (auto& t : ts) t.join();
     }
     delete[] st;
     delete[] W;

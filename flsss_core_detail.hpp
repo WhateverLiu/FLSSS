@@ -78,16 +78,18 @@ void complement_bounds_in_place(
     }
 }
 
-// Input mutation: does not modify nrow or small.
+// Input mutation: does not modify nrow or subset.
+// Avoid the name `small`: Windows headers define it
+// as a macro for `char`.
 template <typename Ind>
 [[nodiscard]] vec<Ind> complement_indices(
-    size_t nrow, const vec<Ind>& small)
+    size_t nrow, const vec<Ind>& subset)
 {
     vec<uint8_t> in(nrow, 0);
-    for (const auto i : small)
+    for (const auto i : subset)
         in[size_t(i)] = 1;
     vec<Ind> out;
-    out.reserve(nrow - small.size());
+    out.reserve(nrow - subset.size());
     for (size_t i = 0; i < nrow; ++i)
         if (!in[i]) out.push_back(Ind(i));
     return out;
@@ -236,15 +238,15 @@ template <typename Val, typename Ind, size_t Ncol = 0>
             lo_work.data(), hi_work.data()).leadingC;
     }
 
-    auto small = FLSSS_nonzero_len_with_leading<Val, Ind, Ncol>(
+    auto subset = FLSSS_nonzero_len_with_leading<Val, Ind, Ncol>(
         X, nrow, nc, k_solve, leadingC,
         lo_work.data(), hi_work.data(),
         nSolutionsNeeded, maxIterations,
         timeLimitSeconds, deadline, n_threads);
 
-    if (!complement) return small;
+    if (!complement) return subset;
 
-    for (auto& s : small)
+    for (auto& s : subset)
         s = complement_indices<Ind>(nrow, s);
-    return small;
+    return subset;
 }

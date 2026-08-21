@@ -1,6 +1,9 @@
 #pragma once
 
 #include "infra/infra.hpp"
+#ifdef _WIN32
+#undef small
+#endif
 #include <chrono>
 #include <cstddef>
 
