@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "setuptools>=64",
+    "setuptools>=77",
     "pybind11>=2.12",
     "numpy",
 ]
@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flsss"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python bindings for the FLSSS subset-sum solver"
 readme = "README.md"
 license = "GPL-3.0-only"
@@ -50,16 +50,16 @@ flsss = ["*.so", "*.pyd", "*.dll", "*.pyc"]
 
 [tool.cibuildwheel]
 build = "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
-skip = "pp* *-win32 *-manylinux_i686 *-musllinux_*"
+skip = "*-win32 *-manylinux_i686 *-musllinux_*"
 test-command = "python -c \"import flsss, numpy as np; x=np.array([1,2,3], dtype=np.int32); assert flsss.gen(x, 3, 3, len=2)\""
 build-verbosity = 1
+manylinux-x86_64-image = "manylinux_2_28"
 
 [tool.cibuildwheel.linux]
 archs = "x86_64"
-manylinux-x86-64-image = "manylinux_2_28"
 
 [tool.cibuildwheel.macos]
-archs = "x86_64 arm64"
+archs = "auto"
 environment = { MACOSX_DEPLOYMENT_TARGET = "11.0" }
 
 [tool.cibuildwheel.windows]

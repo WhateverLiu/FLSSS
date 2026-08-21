@@ -8,15 +8,6 @@ from pybind11.setup_helpers import Pybind11Extension
 from pybind11.setup_helpers import build_ext
 from setuptools import setup
 
-# Python.org macOS builds are universal2. A fat
-# binary cannot use -march=native. Do not overwrite
-# ARCHFLAGS when cibuildwheel already set them.
-if sys.platform == "darwin":
-    os.environ.setdefault(
-        "MACOSX_DEPLOYMENT_TARGET", "11.0")
-    os.environ.setdefault(
-        "ARCHFLAGS", "-arch " + platform.machine())
-
 
 def _truthy(name):
     return os.environ.get(name, "").lower() in (
@@ -25,6 +16,17 @@ def _truthy(name):
 
 def _cibuildwheel():
     return os.environ.get("CIBUILDWHEEL") == "1"
+
+
+# Python.org macOS builds are universal2. A fat
+# binary cannot use -march=native. Never overwrite
+# ARCHFLAGS: cibuildwheel sets them per-arch.
+if sys.platform == "darwin":
+    os.environ.setdefault(
+        "MACOSX_DEPLOYMENT_TARGET", "11.0")
+    if not _cibuildwheel() and "ARCHFLAGS" not in os.environ:
+        os.environ["ARCHFLAGS"] = (
+            "-arch " + platform.machine())
 
 
 def _windows_gcc_available():
@@ -83,12 +85,9 @@ class BuildExt(build_ext):
         msvc = self.compiler.compiler_type == "msvc"
         native = _want_native()
         if msvc:
-            opts = ["/O2", "/fp:fast"]
+            # /GL+/LTCG can fail on this large TU in CI.
+            opts = ["/O2", "/fp:fast", "/bigobj"]
             link = []
-            if not native:
-                # LTCG is portable; keep it for wheels.
-                opts.append("/GL")
-                link.append("/LTCG")
         else:
             # Pybind11Extension always injects MSVC flags
             # on Windows, even for MinGW.
