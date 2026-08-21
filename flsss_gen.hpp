@@ -58,18 +58,6 @@ void ensureMatrixValueWidth(double maxColAbsSum)
         return fn.template operator()<int32_t>();
     return fn.template operator()<int64_t>();
 }
-
-template <size_t I = 1>
-[[nodiscard]] auto dispatchNcol(size_t n, auto&& fn)
-{
-    if constexpr (I > kMaxStaticNcol)
-        return fn.template operator()<0>();
-    else {
-        if (n == I)
-            return fn.template operator()<I>();
-        return dispatchNcol<I + 1>(n, fn);
-    }
-}
 } // namespace flsss_detail
 
 
@@ -119,16 +107,13 @@ template <typename Val>
     return flsss_detail::dispatchSignedWidth(
         flsss_detail::minSignedByteSizeIndexCount(nrow),
         [&]<typename Ind>() {
-            return flsss_detail::dispatchNcol(ncol,
-                [&]<size_t Ncol>() {
-                    return flsss_detail::make_gen_result(
-                        FLSSS_core<Val, Ind, Ncol>(
-                            X, nrow, ncol, len,
-                            targetSumLowerBound,
-                            targetSumUpperBound,
-                            nSolutionsNeeded, maxIterations,
-                            timeLimitSeconds, n_threads));
-                });
+            return flsss_detail::make_gen_result(
+                FLSSS_core<Val, Ind>(
+                    X, nrow, ncol, len,
+                    targetSumLowerBound,
+                    targetSumUpperBound,
+                    nSolutionsNeeded, maxIterations,
+                    timeLimitSeconds, n_threads));
         });
 }
 

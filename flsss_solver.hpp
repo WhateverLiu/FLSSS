@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 #include "flsss_common.hpp"
+#include "flsss_size.hpp"
 #include "trimat.hpp"
 #include "node_arena.hpp"
 #include "findbound.hpp"
@@ -56,7 +57,7 @@ struct VerifyBounds {
     Val hi;
 };
 
-// NcolRest == 0: runtime rest-width (ncol > 10 path).
+// NcolRest == 0: runtime rest-width.
 // NcolRest != 0: compile-time rest-width for unroll / SIMD.
 template <typename Val, size_t NcolRest = 0>
 struct VerifyBand {
@@ -271,6 +272,7 @@ struct Solver {
         accFrom(0);
 
         const auto tupleLen = hope.size();
+        size_t boxIters = 0;
 
         auto emitTuple = [&] {
             if (shared && shared->abort.load(
@@ -298,6 +300,21 @@ struct Solver {
                 if (verify.inBand()) emitTuple();
             } else emitTuple();
             if (stop) break;
+            if ((++boxIters & kWallClockCheckMask) == 0) {
+                if (shared && shared->abort.load(
+                        std::memory_order_relaxed)) {
+                    stop = true;
+                    break;
+                }
+                if (std::chrono::steady_clock::now()
+                        >= deadline) {
+                    if (shared)
+                        shared->abort.store(
+                            true, std::memory_order_relaxed);
+                    stop = true;
+                    break;
+                }
+            }
 
             auto pos = len;
             auto advanced = false;
@@ -361,10 +378,14 @@ struct Solver {
             auto g = size_t(N) - size_t(LEN);
             while (g > 1) { g >>= 1; ++bis; }
         }
-        const auto chunk =
-            arena.chunkBytes(LEN) + arena.maxAlign();
-        arena.reserveBytes(
-            (size_t(LEN) * (bis + 3) + 4) * chunk);
+        const auto arrBytes = mul_or_throw(
+            mul_or_throw(size_t{2}, size_t(LEN)), sizeof(Ind));
+        const auto chunk = add_or_throw(
+            add_or_throw(arena.arraysRel(), arrBytes),
+            arena.maxAlign());
+        const auto nchunks = add_or_throw(
+            mul_or_throw(size_t(LEN), bis + 3), size_t{4});
+        arena.reserveBytes(mul_or_throw(nchunks, chunk));
     }
 
     [[nodiscard]] bool is_solved() const {
@@ -813,8 +834,7 @@ template <typename Val, typename Ind, typename Verify = NoVerify>
     S.perm     = v_original_index;
     S.pinned.reserve(len + 1);
     S.hope.reserve(len);
-    S.results.reserve(
-        n_solutions_needed < 1024 ? n_solutions_needed + 7 : 1024);
+    S.results.reserve(result_reserve_cap(n_solutions_needed));
     S.reserveForSearch();
 
     const auto T = resolve_n_threads(n_threads);

@@ -12,10 +12,6 @@ using vec = infra::sequence<T>;
 
 namespace flsss_detail {
 
-// Compile-time column count for FLSSS_gen dispatch.
-// 0 means runtime ncol (the current path).
-inline constexpr size_t kMaxStaticNcol = 10;
-
 template <size_t Ncol>
 [[nodiscard]] constexpr size_t ncol_or(size_t ncol) noexcept
 {

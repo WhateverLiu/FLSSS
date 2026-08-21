@@ -36,8 +36,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
+#include <new>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include "flsss_size.hpp"
 
 namespace flsss_detail {
 
@@ -126,7 +130,8 @@ public:
     // Total bytes for a chunk whose arrays hold `cap`
     // entries each.
     [[nodiscard]] static size_t chunkBytes(Ind cap) {
-        return arraysRel() + 2 * cap * sizeof(Ind);
+        return arraysRel()
+            + 2 * size_t(cap) * sizeof(Ind);
     }
 
     // -------- buffer lifetime / stack discipline --------
@@ -143,9 +148,14 @@ public:
     [[nodiscard]] size_t alloc(Ind cap) {
         const auto A   = maxAlign();
         const auto fb  = alignUp(top_, A);
-        const auto end = fb + chunkBytes(cap);
+        const auto n   = chunkBytes(cap);
+        if (n > std::numeric_limits<size_t>::max() - fb)
+            throw std::overflow_error(
+                "FLSSS allocation size overflow");
+        const auto end = fb + n;
         if (end > cap_)
-            ensureCapacity(std::max(end, cap_ * 2 + 256));
+            ensureCapacity(end);
+        if (end > cap_) throw std::bad_alloc();
         top_ = end;
         return fb;
     }
@@ -212,10 +222,14 @@ private:
 
     void ensureCapacity(size_t need) {
         if (need <= cap_) return;
-        const auto newCap = std::max(need, cap_ * 2 + 256);
+        size_t newCap = need;
+        constexpr auto lim =
+            std::numeric_limits<size_t>::max() - 256;
+        if (cap_ <= lim / 2)
+            newCap = std::max(need, cap_ * 2 + 256);
         auto* nb = reinterpret_cast<std::byte*>(std::realloc(
             buffer_, newCap));
-        if (!nb && newCap != 0) return;
+        if (!nb && newCap != 0) throw std::bad_alloc();
         buffer_ = nb;
         cap_ = newCap;
     }

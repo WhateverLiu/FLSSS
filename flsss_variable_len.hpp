@@ -2,6 +2,7 @@
 #include "flsss_column_heuristic.hpp"
 #include "flsss_common.hpp"
 #include "flsss_core_detail.hpp"
+#include "flsss_size.hpp"
 #include <algorithm>
 #include <chrono>
 #include <utility>
@@ -81,7 +82,8 @@ template <typename Val, typename Ind, size_t Ncol = 0>
         flsss_detail::deadline_from_seconds(timeLimitSeconds);
 
     vec<vec<Ind>> solutions;
-    solutions.reserve(nSolutionsNeeded);
+    solutions.reserve(
+        flsss_detail::result_reserve_cap(nSolutionsNeeded));
     for (auto& c : ranked) {
         if (solutions.size() >= nSolutionsNeeded) break;
         if (std::chrono::steady_clock::now() >= deadline) break;

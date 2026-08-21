@@ -3,8 +3,8 @@
 #include "flsss_variable_len.hpp"
 
 
-// Ncol == 0: runtime column count (ncol > 10).
-// Ncol == 1..10: compile-time column count.
+// Ncol == 0: runtime column count.
+// Ncol != 0: compile-time column count.
 template <typename Val, typename Ind, size_t Ncol = 0>
 [[nodiscard]] vec<vec<Ind>> FLSSS_core(
     const Val* X, size_t nrow, size_t ncol,

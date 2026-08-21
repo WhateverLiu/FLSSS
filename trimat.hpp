@@ -18,7 +18,11 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <limits>
+#include <new>
+#include <stdexcept>
 #include <type_traits>
+#include "flsss_size.hpp"
 
 template <typename Val, typename Ind>
 class TriMat {
@@ -30,24 +34,38 @@ public:
     ~TriMat() { destroy(); }
 
     [[nodiscard]] static size_t valueCount(size_t N, size_t L) {
-        return (2 * N - L + 1) * L / 2;
+        if (L == 0) return 0;
+        if (L > N)
+            throw std::invalid_argument(
+                "TriMat length exceeds N");
+        const auto twoN = flsss_detail::mul_or_throw(size_t{2}, N);
+        const auto t = flsss_detail::add_or_throw(twoN - L, size_t{1});
+        if ((t & 1) == 0)
+            return flsss_detail::mul_or_throw(t / 2, L);
+        return flsss_detail::mul_or_throw(t, L / 2);
     }
 
     void build(auto&& src, size_t N, size_t L) {
         destroy();
+        if (L == 0) {
+            N_ = Ind(N);
+            return;
+        }
 
-        N_ = Ind(N);
-        L_ = Ind(L);
         const auto nVal = valueCount(N, L);
-        const auto valBytes = nVal * sizeof(Val);
+        const auto valBytes = flsss_detail::mul_or_throw(
+            nVal, sizeof(Val));
         const auto ptrOff   = alignUp(valBytes, alignof(Val*));
-        const auto total    = ptrOff + L * sizeof(Val*);
+        const auto total    = flsss_detail::add_or_throw(
+            ptrOff, flsss_detail::mul_or_throw(L, sizeof(Val*)));
 
         block_ = reinterpret_cast<std::byte*>(std::malloc(total));
-        if (!block_ && total != 0) return;
+        if (!block_) throw std::bad_alloc();
 
         auto* data = reinterpret_cast<Val*>(block_);
         rows_ = reinterpret_cast<Val**>(block_ + ptrOff);
+        N_ = Ind(N);
+        L_ = Ind(L);
 
         buildRowPointers(data);
         gatherRow0(src);
@@ -71,7 +89,12 @@ public:
 
 private:
     [[nodiscard]] static size_t alignUp(size_t n, size_t a) {
-        return (n + (a - 1)) / a * a;
+        if (a <= 1) return n;
+        const auto pad = a - 1;
+        if (n > std::numeric_limits<size_t>::max() - pad)
+            throw std::overflow_error(
+                "FLSSS allocation size overflow");
+        return (n + pad) / a * a;
     }
 
     void buildRowPointers(Val* data) {
