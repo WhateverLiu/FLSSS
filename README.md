@@ -1,8 +1,7 @@
 # flsss
 
 **flsss** finds subsets of integer rows whose sums fall within given
-bounds. It handles both the classic subset-sum problem and its
-multidimensional form. A C++20 branch-and-bound solver does the search,
+bounds. A C++20 branch-and-bound solver does the search,
 and a small Python API makes it easy to use.
 
 The project is a simplified, accelerated take on
@@ -133,7 +132,7 @@ gen(v, lo=0, hi=3, len=0, n_solutions=100, time_limit=3600)
 
 ### A needle in a haystack
 
-The classic FLSSS demonstration: hunt for a subset of size 200 hidden
+Hunt for a subset of size 200 hidden
 inside a superset of 1000 numbers. The search space is astronomical, yet
 flsss finds qualifying subsets in milliseconds.
 
