@@ -26,11 +26,12 @@
       const FLSSS_VAL* X, size_t nrow, size_t ncol, size_t len,             \
       const FLSSS_VAL* lo, const FLSSS_VAL* hi,                             \
       size_t n_solutions, size_t max_iterations,                           \
-      double time_limit, int n_threads) {                                  \
+      double time_limit, int n_threads, bool verbose) {                    \
     return flsss_detail::make_gen_result(                                   \
         FLSSS_core<FLSSS_VAL, IND_T>(                                       \
             X, nrow, ncol, len, lo, hi,                                     \
-            n_solutions, max_iterations, time_limit, n_threads));           \
+            n_solutions, max_iterations, time_limit,                        \
+            n_threads, verbose));                                           \
   }
 
 FLSSS_DEFINE_CORE(int8_t, i8)

@@ -16,7 +16,8 @@ template <typename Val, typename Ind>
     size_t nSolutionsNeeded,
     size_t maxIterations,
     double timeLimitSeconds,
-    int n_threads = 1)
+    int n_threads = 1,
+    flsss_detail::FindBoundProfile* profile = nullptr)
 {
     if (nrow == 0 || ncol == 0 || nSolutionsNeeded == 0)
         return {};
@@ -97,7 +98,7 @@ template <typename Val, typename Ind>
             c.lo.data(), c.hi.data(),
             nSolutionsNeeded - solutions.size(),
             maxIterations, timeLimitSeconds, deadline,
-            n_threads);
+            n_threads, profile);
         if (c.flipped) {
             for (auto& s : part)
                 s = complement_indices<Ind>(nrow, s);

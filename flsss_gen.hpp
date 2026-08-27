@@ -12,20 +12,21 @@ template <typename Val>
     size_t nSolutionsNeeded,
     size_t maxIterations,
     double timeLimitSeconds,
-    int n_threads = 1)
+    int n_threads = 1,
+    bool verbose = false)
 {
     return flsss_detail::FLSSS_gen_run<Val>(
         X, nrow, ncol, len,
         targetSumLowerBound, targetSumUpperBound,
         nSolutionsNeeded, maxIterations,
         timeLimitSeconds, n_threads,
-        []<typename Ind>(
+        [verbose]<typename Ind>(
             const Val* x, size_t nr, size_t nc, size_t ln,
             const Val* lo, const Val* hi,
             size_t nsol, size_t maxit, double tlim, int nthr) {
             return flsss_detail::make_gen_result(
                 FLSSS_core<Val, Ind>(
                     x, nr, nc, ln, lo, hi,
-                    nsol, maxit, tlim, nthr));
+                    nsol, maxit, tlim, nthr, verbose));
         });
 }

@@ -108,7 +108,8 @@ template <typename Val, typename Ind>
     double timeLimitSeconds,
     std::optional<
         std::chrono::steady_clock::time_point> deadline = {},
-    int n_threads = 1)
+    int n_threads = 1,
+    flsss_detail::FindBoundProfile* profile = nullptr)
 {
     if (ncol == 1)
         leadingC = 0;
@@ -163,7 +164,7 @@ template <typename Val, typename Ind>
             nrow, rowOrder.data(),
             loLeading, hiLeading,
             nSolutionsNeeded, maxIterations, dl, {},
-            n_threads)
+            n_threads, profile)
             .swap(solutions);
     } else {
         flsss_detail::VerifyBand<Val> verify;
@@ -175,7 +176,7 @@ template <typename Val, typename Ind>
             nrow, rowOrder.data(),
             loLeading, hiLeading,
             nSolutionsNeeded, maxIterations, dl, verify,
-            n_threads)
+            n_threads, profile)
             .swap(solutions);
     }
     return solutions;
@@ -193,7 +194,8 @@ template <typename Val, typename Ind>
     double timeLimitSeconds,
     std::optional<
         std::chrono::steady_clock::time_point> deadline = {},
-    int n_threads = 1)
+    int n_threads = 1,
+    flsss_detail::FindBoundProfile* profile = nullptr)
 {
     if (len == 0 || len > nrow || nrow == 0 || ncol == 0)
         return {};
@@ -237,7 +239,7 @@ template <typename Val, typename Ind>
         X, nrow, ncol, k_solve, leadingC,
         lo_work.data(), hi_work.data(),
         nSolutionsNeeded, maxIterations,
-        timeLimitSeconds, deadline, n_threads);
+        timeLimitSeconds, deadline, n_threads, profile);
 
     if (!complement) return subset;
 

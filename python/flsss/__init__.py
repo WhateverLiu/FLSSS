@@ -29,7 +29,8 @@ def gen(
     n_solutions=1,
     max_iterations=0,
     time_limit=0.0,
-    n_threads=1,
+    n_threads=0,
+    verbose=False,
 ):
     """Find row subsets whose column sums lie in [lo, hi].
 
@@ -49,7 +50,15 @@ def gen(
     time_limit : float
         Wall-clock limit in seconds. 0 means none.
     n_threads : int
-        Worker threads. 1 is serial. 0 uses hardware concurrency.
+        Worker threads. The default 0 uses all hardware
+        concurrency. 1 is serial.
+    verbose : bool
+        If True, profile time spent in the internal findBound()
+        routine, bucketed by the bounding-vector length, and print
+        a report to stderr before returning. Per-length times are
+        averaged over every worker thread ever spawned; each
+        length's percentage is its share of the overall wall time.
+        Off by default and compiled out of the hot path when off.
 
     Returns
     -------
@@ -75,7 +84,7 @@ def gen(
     return _core.gen(
         X, lo, hi, int(len), int(n_solutions),
         int(max_iterations), float(time_limit),
-        int(n_threads))
+        int(n_threads), bool(verbose))
 
 
 FLSSS_gen = gen

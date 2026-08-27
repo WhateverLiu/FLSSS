@@ -8,6 +8,7 @@ wheelhouse/
 *.obj
 *.tmp
 *.dSYM/
+temp/
 __pycache__/
 .pytest_cache/
 *.pyc
@@ -27,3 +28,6 @@ tests/test_dup
 tests/test_gen
 tests/test_len0
 tests/test_len0_raw
+
+# Local test build output
+build_local/

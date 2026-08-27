@@ -152,10 +152,34 @@ struct SharedBudget {
     bool limit_iters = false;
 };
 
-template <typename Val, typename Ind, typename Verify = NoVerify>
+template <typename Val, typename Ind, typename Verify = NoVerify,
+          bool Verbose = false>
 struct Solver {
     using Arena = NodeArena<Val, Ind>;
     using Hdr   = typename Arena::Hdr;
+
+    // ---- verbose profiling (compile-time gated) ----
+    // fbNs[L] holds this solver's cumulative findBound() nanoseconds for
+    // bounding-vector length L. Inert when Verbose is false. Each solver
+    // owns a distinct heap buffer, so per-thread counters never share a
+    // cache line -> no false sharing. A finishing worker's fbNs is summed
+    // into the root accumulator in merge(); the root's totals are then
+    // folded into the run's FindBoundProfile in runCoreWithMat.
+    std::vector<uint64_t> fbNs;
+
+    void prof_reset(size_t maxLen) {
+        if constexpr (Verbose) fbNs.assign(maxLen + 1, 0);
+    }
+
+    // Sum this solver's per-length totals into an aggregate profile.
+    void prof_fold_into(FindBoundProfile& agg) const {
+        if constexpr (Verbose) {
+            if (agg.nsByLen.size() < fbNs.size())
+                agg.nsByLen.resize(fbNs.size(), 0);
+            for (size_t L = 0; L < fbNs.size(); ++L)
+                agg.nsByLen[L] += fbNs[L];
+        }
+    }
 
     // ---- problem data ----
     TriMat<Val, Ind>* M   = nullptr;
@@ -200,9 +224,21 @@ struct Solver {
         auto* LB  = nv.lb;
         auto* UB  = nv.ub;
 
-        auto boo =
-            findBound(*M, len, *nv.min, *nv.max,
-                      LB, *nv.sumLB, UB, *nv.sumUB, scrSR);
+        BoundResult boo;
+        if constexpr (Verbose) {
+            const auto t0 = std::chrono::steady_clock::now();
+            boo = findBound(*M, len, *nv.min, *nv.max,
+                            LB, *nv.sumLB, UB, *nv.sumUB, scrSR);
+            const auto t1 = std::chrono::steady_clock::now();
+            const auto L = size_t(len);
+            if (fbNs.size() <= L) fbNs.resize(L + 1, 0);
+            fbNs[L] += uint64_t(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    t1 - t0).count());
+        } else {
+            boo = findBound(*M, len, *nv.min, *nv.max,
+                            LB, *nv.sumLB, UB, *nv.sumUB, scrSR);
+        }
         if (boo == BoundResult::Pruned) return false;
 
         if (boo == BoundResult::Contained) {
@@ -429,10 +465,20 @@ struct Solver {
         swap(stop, o.stop);
         owned_shared.swap(o.owned_shared);
         swap(shared, o.shared);
+        if constexpr (Verbose)
+            fbNs.swap(o.fbNs);
     }
 
     void merge(Solver& o) {
         o.flushSolCount();
+        if constexpr (Verbose) {
+            // Sum the finishing worker's per-length findBound times into
+            // this (root) accumulator.
+            if (fbNs.size() < o.fbNs.size())
+                fbNs.resize(o.fbNs.size(), 0);
+            for (size_t L = 0; L < o.fbNs.size(); ++L)
+                fbNs[L] += o.fbNs[L];
+        }
         if (o.results.empty()) return;
         results.reserve(results.size() + o.results.size());
         results.insert(
@@ -603,6 +649,9 @@ private:
         pinned.clear();
         pinned.reserve(size_t(LEN) + 1);
         arena.clear();
+        // Fresh stint for a reused worker slot: its previous totals were
+        // already folded in via merge(), so start from zero.
+        prof_reset(size_t(LEN));
         if constexpr (Verify::active) {
             verify.bind(src.verify.vv, src.verify.bounds,
                         src.verify.rest());
@@ -790,44 +839,66 @@ template <typename Val, typename Ind, typename Verify = NoVerify>
     size_t max_iterations,
     std::chrono::steady_clock::time_point deadline,
     const Verify& verify = {},
-    int n_threads = 1)
+    int n_threads = 1,
+    FindBoundProfile* profile = nullptr)
     -> vec<vec<Ind>>
 {
     if (n_solutions_needed == 0) return {};
 
-    Solver<Val, Ind, Verify> S;
-    if constexpr (Verify::active)
-        S.verify.bind(verify.vv, verify.bounds, verify.rest());
-    S.M        = &M;
-    S.v        = M[0];
-    S.N        = Ind(N);
-    S.LEN      = Ind(len);
-    S.gMin     = &lo;
-    S.gMax     = &hi;
-    S.rootLB   = subset_index_lower_bound;
-    S.rootUB   = subset_index_upper_bound;
-    S.sizeNeed = n_solutions_needed;
-    S.maxIter  = max_iterations ? max_iterations
-        : std::numeric_limits<size_t>::max();
-    S.deadline = deadline;
-    S.perm     = v_original_index;
-    S.pinned.reserve(len + 1);
-    S.hope.reserve(len);
-    S.results.reserve(result_reserve_cap(n_solutions_needed));
-    S.reserveForSearch();
+    // The Verbose template bool is chosen once, here, from whether a
+    // profile sink was supplied. The hot path (findBound timing) is
+    // therefore compile-time gated with no per-call branch.
+    auto run = [&]<bool V>() -> vec<vec<Ind>> {
+        Solver<Val, Ind, Verify, V> S;
+        if constexpr (Verify::active)
+            S.verify.bind(verify.vv, verify.bounds, verify.rest());
+        S.M        = &M;
+        S.v        = M[0];
+        S.N        = Ind(N);
+        S.LEN      = Ind(len);
+        S.gMin     = &lo;
+        S.gMax     = &hi;
+        S.rootLB   = subset_index_lower_bound;
+        S.rootUB   = subset_index_upper_bound;
+        S.sizeNeed = n_solutions_needed;
+        S.maxIter  = max_iterations ? max_iterations
+            : std::numeric_limits<size_t>::max();
+        S.deadline = deadline;
+        S.perm     = v_original_index;
+        S.pinned.reserve(len + 1);
+        S.hope.reserve(len);
+        S.results.reserve(result_reserve_cap(n_solutions_needed));
+        S.reserveForSearch();
+        S.prof_reset(len);
 
-    const auto T = resolve_n_threads(n_threads);
-    if (T <= 1) S.solve();
-    else S.solveParallel(T);
+        const auto T = resolve_n_threads(n_threads);
+        if (T <= 1) S.solve();
+        else S.solveParallel(T);
 
-    if (S.results.size() > n_solutions_needed)
-        S.results.resize(n_solutions_needed);
+        if constexpr (V)
+            if (profile) {
+                // S is the root accumulator: its fbNs already holds the
+                // summed per-length time across the T worker threads of
+                // this run. Record T as the number of threads spawned so
+                // the report can average per thread. Variable-length
+                // searches re-spawn per run, so participants accumulates
+                // T across every run.
+                S.prof_fold_into(*profile);
+                profile->participants += uint64_t(T <= 1 ? 1 : T);
+            }
 
-    vec<vec<Ind>> out;
-    out.reserve(S.results.size());
-    for (auto& r : S.results)
-        out.push_back(vec<Ind>(r.begin(), r.end()));
-    return out;
+        if (S.results.size() > n_solutions_needed)
+            S.results.resize(n_solutions_needed);
+
+        vec<vec<Ind>> out;
+        out.reserve(S.results.size());
+        for (auto& r : S.results)
+            out.push_back(vec<Ind>(r.begin(), r.end()));
+        return out;
+    };
+
+    return profile ? run.template operator()<true>()
+                   : run.template operator()<false>();
 }
 
 template <typename Val, typename Ind, typename Verify = NoVerify>

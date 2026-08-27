@@ -19,7 +19,7 @@ template <typename Val>
 using core_fn = FLSSSGenResult (*)(
     const Val*, size_t, size_t, size_t,
     const Val*, const Val*,
-    size_t, size_t, double, int);
+    size_t, size_t, double, int, bool);
 
 inline py::list solutions_to_list(FLSSSGenResult&& res)
 {
@@ -52,6 +52,7 @@ py::list call_gen(
     size_t max_iterations,
     double time_limit,
     size_t n_threads,
+    bool verbose,
     core_fn<Val> c8,
     core_fn<Val> c16,
     core_fn<Val> c32,
@@ -87,13 +88,13 @@ py::list call_gen(
                 const Val* vlo, const Val* vhi,
                 size_t nsol, size_t maxit, double tlim, int nthr) {
                 if constexpr (std::is_same_v<Ind, int8_t>)
-                    return c8(x, nr, nc, ln, vlo, vhi, nsol, maxit, tlim, nthr);
+                    return c8(x, nr, nc, ln, vlo, vhi, nsol, maxit, tlim, nthr, verbose);
                 else if constexpr (std::is_same_v<Ind, int16_t>)
-                    return c16(x, nr, nc, ln, vlo, vhi, nsol, maxit, tlim, nthr);
+                    return c16(x, nr, nc, ln, vlo, vhi, nsol, maxit, tlim, nthr, verbose);
                 else if constexpr (std::is_same_v<Ind, int32_t>)
-                    return c32(x, nr, nc, ln, vlo, vhi, nsol, maxit, tlim, nthr);
+                    return c32(x, nr, nc, ln, vlo, vhi, nsol, maxit, tlim, nthr, verbose);
                 else
-                    return c64(x, nr, nc, ln, vlo, vhi, nsol, maxit, tlim, nthr);
+                    return c64(x, nr, nc, ln, vlo, vhi, nsol, maxit, tlim, nthr, verbose);
             });
     }
     return solutions_to_list(std::move(res));

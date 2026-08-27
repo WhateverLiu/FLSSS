@@ -10,10 +10,61 @@
 // ==========================================================
 
 #include <cstddef>
+#include <cstdint>
+#include <vector>
 
 #include "trimat.hpp"
 
 namespace flsss_detail {
+
+// ----------------------------------------------------------
+// Optional profiling of findBound() calls (verbose mode).
+//
+// Timing is gated at compile time by a template bool on the
+// solver, so a non-verbose build carries zero overhead. When
+// active, each solver thread accumulates the time spent in
+// findBound() bucketed by the current bounding-vector length
+// (the `len` argument, i.e. the size of the LB/UB windows).
+//
+// Per the requested semantics, the reported per-length time is
+// the AVERAGE across every worker thread ever spawned (summed
+// nanoseconds divided by the number of participating threads),
+// not the sum. `participants` is that divisor; it accumulates
+// across every spawned solver thread and across every run of a
+// variable-length search.
+// ----------------------------------------------------------
+struct FindBoundProfile {
+    std::vector<uint64_t> nsByLen;   // summed ns per length
+    uint64_t participants = 0;       // spawned threads that ran findBound
+
+    void ensureLen(size_t len) {
+        if (nsByLen.size() <= len) nsByLen.resize(len + 1, 0);
+    }
+
+    // Add one solver thread's per-length totals (summed ns) and
+    // count it as one participant.
+    void addThread(const std::vector<uint64_t>& tls) {
+        if (nsByLen.size() < tls.size()) nsByLen.resize(tls.size(), 0);
+        for (size_t L = 0; L < tls.size(); ++L) nsByLen[L] += tls[L];
+        ++participants;
+    }
+
+    // Fold another aggregate (e.g. from a prior variable-length run)
+    // into this one.
+    void mergeAgg(const FindBoundProfile& o) {
+        if (nsByLen.size() < o.nsByLen.size())
+            nsByLen.resize(o.nsByLen.size(), 0);
+        for (size_t L = 0; L < o.nsByLen.size(); ++L)
+            nsByLen[L] += o.nsByLen[L];
+        participants += o.participants;
+    }
+
+    [[nodiscard]] uint64_t totalNs() const {
+        uint64_t s = 0;
+        for (auto x : nsByLen) s += x;
+        return s;
+    }
+};
 
 enum class BoundResult {
     Pruned,
